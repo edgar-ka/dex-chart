@@ -1,0 +1,32 @@
+---
+architecture: replication
+
+auth:
+  username: flask
+  password: flask
+  database: flask_db
+
+replication:
+  applicationName: dexapp
+
+primary:
+  persistance:
+    mountPath: /var/postgresql
+  initdb:
+    scripts:
+      initdb.sql: |
+        DROP TABLE IF EXISTS blacklist_ips;
+        CREATE TABLE blacklist_ips (
+        ip_addr inet PRIMARY KEY,
+        blocked_at TIMESTAMP NOT NULL,
+        path_requested VARCHAR
+        );
+readReplicas:
+  replicaCount: 2
+  persistance:
+    mountPath: /var/postgresql
+
+postgresqlDataDir: /var/postgresql/data
+shmVolume:
+  enabled: false
+
