@@ -1,0 +1,43 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ include "dex-app-k8s.fullname" . }}-postgresql-primary"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/component: "primary"
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+    {{- include "dex-app-k8s.selectorLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/component: "primary"
+    {{- include "dex-app-k8s.selectorLabels" . | nindent 4 }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ include "dex-app-k8s.fullname" . }}-postgresql-read"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/component: "read"
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+    {{- include "dex-app-k8s.selectorLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/component: "read"
+    {{- include "dex-app-k8s.selectorLabels" . | nindent 4 }}

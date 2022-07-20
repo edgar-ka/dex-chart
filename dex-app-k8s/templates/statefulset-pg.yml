@@ -1,0 +1,324 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "dex-app-k8s.fullname" . }}-postgresql-primary
+  namespace: {{ .Release.namespace | quote }}
+  labels:
+    app.kubernetes.io/component: primary
+    {{- include "dex-app-k8s.selectorLabels" . | nindent 4 }}
+  annotations:
+spec:
+  replicas: 1
+  serviceName: {{ include "dex-app-k8s.fullname" . }}-postgresql-primary
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: primary
+      {{- include "dex-app-k8s.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      name: {{ include "dex-app-k8s.fullname" . }}-postgresql-primary
+      labels:
+        app.kubernetes.io/component: primary
+        {{- include "dex-app-k8s.selectorLabels" . | nindent 8 }}
+      annotations:
+    spec:
+      serviceAccountName: default
+      
+      # affinity:
+      #   podAffinity:
+          
+      #   podAntiAffinity:
+      #     preferredDuringSchedulingIgnoredDuringExecution:
+      #       - podAffinityTerm:
+      #           labelSelector:
+      #             matchLabels:
+      #               app.kubernetes.io/name: postgresql
+      #               app.kubernetes.io/instance: psql
+      #               app.kubernetes.io/component: primary
+      #           namespaces:
+      #             - "default"
+      #           topologyKey: kubernetes.io/hostname
+      #         weight: 1
+      #   nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      hostNetwork: false
+      hostIPC: false
+      initContainers:
+      containers:
+        - name: postgresql
+          image: docker.io/bitnami/postgresql:{{ .Values.postgresql.imageTag }}
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            # Authentication
+            - name: POSTGRES_USER
+              value: {{ .Values.postgresql.user }}
+            - name: POSTGRES_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dex-app-k8s.fullname" . }}-postgresql
+                  key: postgres-password
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dex-app-k8s.fullname" . }}-postgresql
+                  key: password
+            - name: POSTGRES_DB
+              value: {{ .Values.postgresql.database }}
+            # Replication
+            - name: POSTGRES_REPLICATION_MODE
+              value: "master"
+            - name: POSTGRES_REPLICATION_USER
+              value: {{ .Values.postgresql.replicationUser }}
+            - name: POSTGRES_REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dex-app-k8s.fullname" . }}-postgresql
+                  key: replication-password
+            - name: POSTGRES_CLUSTER_APP_NAME
+              value: dexapp
+            # LDAP
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            # TLS
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            # Audit
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            # Others
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "{{ .Values.postgresql.user }}" -d "dbname={{ .Values.postgresql.database }}" -h 127.0.0.1 -p 5432
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                
+                - |
+                  exec pg_isready -U "{{ .Values.postgresql.user }}" -d "dbname={{ .Values.postgresql.database }}" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+          resources:
+            limits: {}
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: custom-init-scripts
+              mountPath: /docker-entrypoint-initdb.d/
+            - name: data
+              mountPath: /bitnami/postgresql
+      volumes:
+        - name: custom-init-scripts
+          configMap:
+            name: {{ include "dex-app-k8s.fullname" . }}-postgresql-primary-init-scripts
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "dex-app-k8s.fullname" . }}-postgresql-read
+  namespace: {{ .Release.namespace | quote }}
+  labels:
+    app.kubernetes.io/component: read
+    {{- include "dex-app-k8s.selectorLabels" . | nindent 4 }}
+  annotations:
+spec:
+  replicas: 2
+  serviceName: {{ include "dex-app-k8s.fullname" . }}-postgresql-read
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: read
+      {{- include "dex-app-k8s.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      name: {{ include "dex-app-k8s.fullname" . }}-postgresql-read
+      labels:
+        app.kubernetes.io/component: read
+        {{- include "dex-app-k8s.selectorLabels" . | nindent 8 }}
+      annotations:
+    spec:
+      serviceAccountName: default
+      
+      # affinity:
+      #   podAffinity:
+          
+      #   podAntiAffinity:
+      #     preferredDuringSchedulingIgnoredDuringExecution:
+      #       - podAffinityTerm:
+      #           labelSelector:
+      #             matchLabels:
+      #               app.kubernetes.io/name: postgresql
+      #               app.kubernetes.io/instance: psql
+      #               app.kubernetes.io/component: read
+      #           namespaces:
+      #             - "default"
+      #           topologyKey: kubernetes.io/hostname
+      #         weight: 1
+      #   nodeAffinity:
+          
+      securityContext:
+        fsGroup: 1001
+      hostNetwork: false
+      hostIPC: false
+      initContainers:
+      containers:
+        - name: postgresql
+          image: docker.io/bitnami/postgresql:{{ .Values.postgresql.imageTag }}
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            # Authentication
+            - name: POSTGRES_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dex-app-k8s.fullname" . }}-postgresql
+                  key: postgres-password
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dex-app-k8s.fullname" . }}-postgresql
+                  key: password
+            # Replication
+            - name: POSTGRES_REPLICATION_MODE
+              value: "slave"
+            - name: POSTGRES_REPLICATION_USER
+              value: "repl_user"
+            - name: POSTGRES_REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dex-app-k8s.fullname" . }}-postgresql
+                  key: replication-password
+            - name: POSTGRES_CLUSTER_APP_NAME
+              value: dexapp
+            - name: POSTGRES_MASTER_HOST
+              value: {{ include "dex-app-k8s.fullname" . }}-postgresql-primary
+            - name: POSTGRES_MASTER_PORT_NUMBER
+              value: "5432"
+            # TLS
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            # Audit
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            # Others
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "{{ .Values.postgresql.user }}" -d "dbname={{ .Values.postgresql.database }}" -h 127.0.0.1 -p 5432
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                
+                - |
+                  exec pg_isready -U "{{ .Values.postgresql.user }}" -d "dbname={{ .Values.postgresql.database }}" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+          resources:
+            limits: {}
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/postgresql
+      volumes:
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
