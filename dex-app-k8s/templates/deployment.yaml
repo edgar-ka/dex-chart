@@ -39,25 +39,27 @@ spec:
           env:
             - name: DB_HOST
               value: {{ include "dex-app-k8s.fullname" . }}-postgresql-primary
+            - name: DB_HOST_RO
+              value: {{ include "dex-app-k8s.fullname" . }}-postgresql-read
             - name: DB_USERNAME
               value: "{{ .Values.postgresql.user }}"
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: postgresql
+                  name: {{ include "dex-app-k8s.fullname" . }}-postgresql
                   key: password
           ports:
-            - name: http
+            - name: http-app
               containerPort: 8000
               protocol: TCP
           livenessProbe:
             httpGet:
               path: /
-              port: http
+              port: http-app
           readinessProbe:
             httpGet:
               path: /
-              port: http
+              port: http-app
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       {{- with .Values.nodeSelector }}
