@@ -2,14 +2,15 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# Currently setting passwords is not implemented to not complicate templates
 postgresql:
   imageTag: "14.4.0-debian-11-r9"
   readReplicaCount: 1
-  postgresPassword:
+  # postgresPassword:
   user: "flask"
-  password:
+  # password:
   database: "flask_db"
-  replicationUser: "repl_user"
+  # replicationUser: "repl_user"
   replicationPassword:
 
 application:
