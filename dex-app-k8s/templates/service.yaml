@@ -10,9 +10,9 @@ spec:
   type: {{ .Values.service.type }}
   ports:
     - port: {{ .Values.service.port }}
-      targetPort: http
+      targetPort: http-app
       protocol: TCP
-      name: http
+      name: {{ include "dex-app-k8s.fullname" . }}-http
   selector:
     app.kubernetes.io/component: application
     {{- include "dex-app-k8s.selectorLabels" . | nindent 4 }}
