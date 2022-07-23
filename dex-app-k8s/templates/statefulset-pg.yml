@@ -11,9 +11,6 @@ metadata:
 spec:
   replicas: 1
   serviceName: {{ include "dex-app-k8s.fullname" . }}-postgresql-primary
-  updateStrategy:
-    rollingUpdate: {}
-    type: RollingUpdate
   selector:
     matchLabels:
       app.kubernetes.io/component: primary
@@ -24,34 +21,13 @@ spec:
       labels:
         app.kubernetes.io/component: primary
         {{- include "dex-app-k8s.selectorLabels" . | nindent 8 }}
-      annotations:
     spec:
-      serviceAccountName: default
-      
-      # affinity:
-      #   podAffinity:
-          
-      #   podAntiAffinity:
-      #     preferredDuringSchedulingIgnoredDuringExecution:
-      #       - podAffinityTerm:
-      #           labelSelector:
-      #             matchLabels:
-      #               app.kubernetes.io/name: postgresql
-      #               app.kubernetes.io/instance: psql
-      #               app.kubernetes.io/component: primary
-      #           namespaces:
-      #             - "default"
-      #           topologyKey: kubernetes.io/hostname
-      #         weight: 1
-      #   nodeAffinity:
-          
       securityContext:
         fsGroup: 1001
       hostNetwork: false
       hostIPC: false
-      initContainers:
       containers:
-        - name: postgresql
+        - name: postgresql-primary
           image: docker.io/bitnami/postgresql:{{ .Values.postgresql.imageTag }}
           imagePullPolicy: "IfNotPresent"
           securityContext:
@@ -77,7 +53,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ include "dex-app-k8s.fullname" . }}-postgresql
-                  key: password
+                  key: user-password
             - name: POSTGRES_DB
               value: {{ .Values.postgresql.database }}
             # Replication
@@ -142,10 +118,7 @@ spec:
                   exec pg_isready -U "{{ .Values.postgresql.user }}" -d "dbname={{ .Values.postgresql.database }}" -h 127.0.0.1 -p 5432
                   [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
           resources:
-            limits: {}
-            requests:
-              cpu: 250m
-              memory: 256Mi
+            {{- toYaml .Values.postgresql.resources | nindent 12 }}
           volumeMounts:
             - name: custom-init-scripts
               mountPath: /docker-entrypoint-initdb.d/
@@ -175,11 +148,8 @@ metadata:
     {{- include "dex-app-k8s.selectorLabels" . | nindent 4 }}
   annotations:
 spec:
-  replicas: 2
+  replicas: {{ .Values.postgresql.readReplicaCount }}
   serviceName: {{ include "dex-app-k8s.fullname" . }}-postgresql-read
-  updateStrategy:
-    rollingUpdate: {}
-    type: RollingUpdate
   selector:
     matchLabels:
       app.kubernetes.io/component: read
@@ -192,32 +162,12 @@ spec:
         {{- include "dex-app-k8s.selectorLabels" . | nindent 8 }}
       annotations:
     spec:
-      serviceAccountName: default
-      
-      # affinity:
-      #   podAffinity:
-          
-      #   podAntiAffinity:
-      #     preferredDuringSchedulingIgnoredDuringExecution:
-      #       - podAffinityTerm:
-      #           labelSelector:
-      #             matchLabels:
-      #               app.kubernetes.io/name: postgresql
-      #               app.kubernetes.io/instance: psql
-      #               app.kubernetes.io/component: read
-      #           namespaces:
-      #             - "default"
-      #           topologyKey: kubernetes.io/hostname
-      #         weight: 1
-      #   nodeAffinity:
-          
       securityContext:
         fsGroup: 1001
       hostNetwork: false
       hostIPC: false
-      initContainers:
       containers:
-        - name: postgresql
+        - name: postgresql-read
           image: docker.io/bitnami/postgresql:{{ .Values.postgresql.imageTag }}
           imagePullPolicy: "IfNotPresent"
           securityContext:
@@ -241,7 +191,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ include "dex-app-k8s.fullname" . }}-postgresql
-                  key: password
+                  key: user-password
             # Replication
             - name: POSTGRES_REPLICATION_MODE
               value: "slave"
@@ -304,11 +254,8 @@ spec:
                 - |
                   exec pg_isready -U "{{ .Values.postgresql.user }}" -d "dbname={{ .Values.postgresql.database }}" -h 127.0.0.1 -p 5432
                   [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
-          resources:
-            limits: {}
-            requests:
-              cpu: 250m
-              memory: 256Mi
+          resources: 
+            {{- toYaml .Values.postgresql.resources | nindent 12 }}
           volumeMounts:
             - name: data
               mountPath: /bitnami/postgresql

@@ -1,26 +1,22 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "dex-app-k8s.fullname" . }}-app
+  namespace: {{ .Release.Namespace | quote }}
+  name: {{ include "dex-app-k8s.fullname" . }}-app-rw
   labels:
-    app.kubernetes.io/component: application
+    app.kubernetes.io/component: application-rw
     {{- include "dex-app-k8s.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
-  replicas: {{ .Values.application.replicaCount }}
-  {{- end }}
+  replicas: {{ .Values.application.replicaCountRW }}
   selector:
     matchLabels:
-      app.kubernetes.io/component: application
+      app.kubernetes.io/component: application-rw
       {{- include "dex-app-k8s.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
-      annotations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       labels:
-        app.kubernetes.io/component: application
+        app.kubernetes.io/component: application-rw
         {{- include "dex-app-k8s.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
@@ -39,15 +35,13 @@ spec:
           env:
             - name: DB_HOST
               value: {{ include "dex-app-k8s.fullname" . }}-postgresql-primary
-            - name: DB_HOST_RO
-              value: {{ include "dex-app-k8s.fullname" . }}-postgresql-read
             - name: DB_USERNAME
               value: "{{ .Values.postgresql.user }}"
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "dex-app-k8s.fullname" . }}-postgresql
-                  key: password
+                  key: user-password
           ports:
             - name: http-app
               containerPort: 8000
@@ -61,16 +55,62 @@ spec:
               path: /
               port: http-app
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
-      {{- with .Values.nodeSelector }}
-      nodeSelector:
+            {{- toYaml .Values.application.resources | nindent 12 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: {{ .Release.Namespace | quote }}
+  name: {{ include "dex-app-k8s.fullname" . }}-app-ro
+  labels:
+    app.kubernetes.io/component: application-ro
+    {{- include "dex-app-k8s.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.application.replicaCountRO }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: application-ro
+      {{- include "dex-app-k8s.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: application-ro
+        {{- include "dex-app-k8s.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+      serviceAccountName: {{ include "dex-app-k8s.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.application.image.repository }}:{{ .Values.application.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.application.image.pullPolicy }}
+          env:
+            - name: DB_HOST
+              value: {{ include "dex-app-k8s.fullname" . }}-postgresql-read
+            - name: DB_USERNAME
+              value: "{{ .Values.postgresql.user }}"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "dex-app-k8s.fullname" . }}-postgresql
+                  key: user-password
+          ports:
+            - name: http-app
+              containerPort: 8000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http-app
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http-app
+          resources:
+            {{- toYaml .Values.application.resources | nindent 12 }}
