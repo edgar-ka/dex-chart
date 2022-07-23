@@ -35,8 +35,10 @@ spec:
           env:
             - name: DB_HOST
               value: {{ include "dex-app-k8s.fullname" . }}-postgresql-primary
+            - name: DB_NAME
+              value: {{ .Values.postgresql.database }}
             - name: DB_USERNAME
-              value: "{{ .Values.postgresql.user }}"
+              value: {{ .Values.postgresql.user }}
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -93,8 +95,10 @@ spec:
           env:
             - name: DB_HOST
               value: {{ include "dex-app-k8s.fullname" . }}-postgresql-read
+            - name: DB_NAME
+              value: {{ .Values.postgresql.database }}
             - name: DB_USERNAME
-              value: "{{ .Values.postgresql.user }}"
+              value: {{ .Values.postgresql.user }}
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
