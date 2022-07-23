@@ -47,6 +47,6 @@ Configurable parameters:
 
 ```bash
 git clone https://github.com/edgar-ka/dex-chart.git
-helm install -t myvalues.yml mytestapp dex-chart/dex-app-k8s
+helm install -t myvalues.yml mytestapp dex-chart/charts/dex-app-k8s
 ```
 
